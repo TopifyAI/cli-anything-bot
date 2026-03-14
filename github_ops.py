@@ -6,13 +6,13 @@ import uuid
 from pathlib import Path
 
 import git
-from github import Github
+from github import Auth, Github
 
 import config
 
 logger = logging.getLogger(__name__)
 
-_gh = Github(config.GITHUB_TOKEN)
+_gh = Github(auth=Auth.Token(config.GITHUB_TOKEN))
 
 
 def get_bot_user():

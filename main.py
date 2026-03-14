@@ -5,7 +5,7 @@ import sys
 import time
 import traceback
 
-from github import Github
+from github import Auth, Github
 
 import config
 import github_ops
@@ -67,7 +67,7 @@ def _process_notification(notification):
             pass
 
     # Read the actual issue/comment body to extract the trigger
-    gh = Github(config.GITHUB_TOKEN)
+    gh = Github(auth=Auth.Token(config.GITHUB_TOKEN))
     gh_repo = gh.get_repo(repo_full_name)
     trigger_text = ""
     comment_id = None
@@ -160,7 +160,7 @@ def _process_notification(notification):
 
 def poll_loop():
     """Main polling loop: check GitHub notifications for triggers."""
-    gh = Github(config.GITHUB_TOKEN)
+    gh = Github(auth=Auth.Token(config.GITHUB_TOKEN))
     bot_user = gh.get_user()
     logger.info("Bot started as @%s — polling every %ds", bot_user.login, config.POLL_INTERVAL)
 
@@ -205,7 +205,7 @@ def main():
 
     if "--once" in sys.argv:
         # Single poll for testing
-        gh = Github(config.GITHUB_TOKEN)
+        gh = Github(auth=Auth.Token(config.GITHUB_TOKEN))
         notifications = gh.get_user().get_notifications(all=False)
         for n in notifications:
             if n.subject.type in ("Issue", "PullRequest"):
