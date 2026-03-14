@@ -4,12 +4,18 @@ import logging
 import sys
 import time
 import traceback
+from collections import defaultdict
+from datetime import date
 
 from github import Auth, Github
 
 import config
 import github_ops
 from builder import build_harness
+
+# Rate limiting: track builds per user per day and global per day
+_user_builds: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+_global_builds: dict[str, int] = defaultdict(int)
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
@@ -44,6 +50,39 @@ def _extract_trigger(text: str) -> str | None:
 
     # Return explicit name or empty string (caller will use repo name)
     return words[0] if words else ""
+
+
+def _check_access(username: str, repo_full_name: str) -> str | None:
+    """Check if a user/repo is allowed. Returns denial reason or None if allowed."""
+    # Access mode check
+    mode = config.ACCESS_MODE.lower()
+    if mode == "users" and config.ALLOWED_USERS:
+        if username.lower() not in config.ALLOWED_USERS:
+            return f"User `@{username}` is not on the allowed list."
+    elif mode == "repos" and config.ALLOWED_REPOS:
+        if repo_full_name.lower() not in config.ALLOWED_REPOS:
+            return f"Repository `{repo_full_name}` is not on the allowed list."
+    # "open" mode allows everyone
+
+    # Rate limiting
+    today = date.today().isoformat()
+
+    if config.DAILY_LIMIT_PER_USER > 0:
+        if _user_builds[username][today] >= config.DAILY_LIMIT_PER_USER:
+            return f"User `@{username}` has reached the daily limit of {config.DAILY_LIMIT_PER_USER} builds."
+
+    if config.DAILY_LIMIT_GLOBAL > 0:
+        if _global_builds[today] >= config.DAILY_LIMIT_GLOBAL:
+            return "The bot has reached its global daily build limit."
+
+    return None
+
+
+def _record_build(username: str):
+    """Record a build for rate limiting."""
+    today = date.today().isoformat()
+    _user_builds[username][today] += 1
+    _global_builds[today] += 1
 
 
 def _derive_software_name(repo_full_name: str) -> str:
@@ -108,6 +147,25 @@ def _process_notification(notification):
     software_name = software_name_override or _derive_software_name(repo_full_name)
     logger.info("Software name: %s", software_name)
 
+    # Determine who triggered the build
+    trigger_user = notification.repository.owner.login
+    if subject.type == "Issue" and issue_number:
+        trigger_user = gh_repo.get_issue(issue_number).user.login
+    elif subject.type == "PullRequest" and issue_number:
+        trigger_user = gh_repo.get_pull(issue_number).user.login
+
+    # Access check
+    denial = _check_access(trigger_user, repo_full_name)
+    if denial:
+        logger.info("Access denied for %s on %s: %s", trigger_user, repo_full_name, denial)
+        if issue_number:
+            github_ops.post_comment(
+                repo_full_name, issue_number,
+                f"⛔ **cli-anything-bot** cannot process this request.\n\n{denial}\n\n"
+                f"Contact the bot operator to request access.",
+            )
+        return
+
     # Acknowledge with reaction and comment
     if comment_id:
         github_ops.add_reaction(repo_full_name, comment_id, "eyes")
@@ -133,6 +191,8 @@ def _process_notification(notification):
                     "The repository may not contain a recognizable GUI application.",
                 )
             return
+
+        _record_build(trigger_user)
 
         branch = github_ops.create_branch_and_commit(local_path, generated_files, software_name)
         pr_url = github_ops.push_and_open_pr(
