@@ -17,22 +17,14 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 TRIGGER_KEYWORD = "/cli-anything"
 
 # --- Abuse prevention ---
+# Only approved users can trigger builds and have invitations accepted.
+# To request access, email chenglinwei@topify.ai
 
-# Allowlist mode: "open" (anyone), "users" (allowed users only), "repos" (allowed repos only)
-ACCESS_MODE = os.environ.get("ACCESS_MODE", "users")
-
-# Comma-separated list of allowed GitHub usernames (when ACCESS_MODE=users)
+# Comma-separated list of approved GitHub usernames
 ALLOWED_USERS = set(
     u.strip().lower()
     for u in os.environ.get("ALLOWED_USERS", "").split(",")
     if u.strip()
-)
-
-# Comma-separated list of allowed repos like "owner/repo" (when ACCESS_MODE=repos)
-ALLOWED_REPOS = set(
-    r.strip().lower()
-    for r in os.environ.get("ALLOWED_REPOS", "").split(",")
-    if r.strip()
 )
 
 # Max builds per user per day (0 = unlimited)

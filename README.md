@@ -6,11 +6,17 @@ agent-native CLI using the [CLI-Anything](https://github.com/anthropics/CLI-Anyt
 ## How it works
 
 ```
-1. Invite @cli-anything-bot to your repo (Settings → Collaborators → Add)
-2. Create an issue or comment with: /cli-anything
-3. The bot analyzes your codebase and generates a complete CLI harness
-4. A PR appears with the generated CLI — review, tweak, merge
+1. Email chenglinwei@topify.ai to request access (include your GitHub username)
+2. Once approved, invite @cli-anything-bot to your repo (Settings → Collaborators → Add)
+3. The bot auto-accepts the invitation
+4. Create an issue or comment with: /cli-anything
+5. The bot analyzes your codebase and generates a complete CLI harness
+6. A PR appears with the generated CLI — review, tweak, merge
 ```
+
+> **Access is by approval only.** To prevent abuse, the bot only accepts
+> invitations and processes requests from approved GitHub users. Email
+> **chenglinwei@topify.ai** to request access.
 
 ### What gets generated
 

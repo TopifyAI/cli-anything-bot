@@ -54,15 +54,15 @@ def _extract_trigger(text: str) -> str | None:
 
 def _check_access(username: str, repo_full_name: str) -> str | None:
     """Check if a user/repo is allowed. Returns denial reason or None if allowed."""
-    # Access mode check
-    mode = config.ACCESS_MODE.lower()
-    if mode == "users" and config.ALLOWED_USERS:
-        if username.lower() not in config.ALLOWED_USERS:
-            return f"User `@{username}` is not on the allowed list."
-    elif mode == "repos" and config.ALLOWED_REPOS:
-        if repo_full_name.lower() not in config.ALLOWED_REPOS:
-            return f"Repository `{repo_full_name}` is not on the allowed list."
-    # "open" mode allows everyone
+    if config.ALLOWED_USERS and username.lower() not in config.ALLOWED_USERS:
+        return (
+            f"User `@{username}` is not approved to use this bot.\n\n"
+            f"To request access, email **chenglinwei@topify.ai** with:\n"
+            f"- Your GitHub username\n"
+            f"- The repository you want to use it on\n"
+            f"- A brief description of your use case\n\n"
+            f"Once approved, the bot will accept your invitation and be ready to use."
+        )
 
     # Rate limiting
     today = date.today().isoformat()
@@ -231,13 +231,26 @@ def poll_loop():
 
     while True:
         try:
-            # Auto-accept any pending repo collaboration invitations
+            # Only accept invitations from approved users
             try:
                 for invite in gh.get_user().get_invitations():
-                    gh._Github__requester.requestJsonAndCheck(
-                        "PATCH", f"/user/repository_invitations/{invite.id}"
+                    inviter = invite.inviter.login if invite.inviter else ""
+                    repo_owner = invite.repository.owner.login if invite.repository else ""
+                    # Accept if the inviter or repo owner is on the allowed list
+                    allowed = not config.ALLOWED_USERS or (
+                        inviter.lower() in config.ALLOWED_USERS
+                        or repo_owner.lower() in config.ALLOWED_USERS
                     )
-                    logger.info("Accepted repo invitation: %s", invite.repository.full_name)
+                    if allowed:
+                        gh._Github__requester.requestJsonAndCheck(
+                            "PATCH", f"/user/repository_invitations/{invite.id}"
+                        )
+                        logger.info("Accepted invitation from @%s: %s", inviter, invite.repository.full_name)
+                    else:
+                        logger.info(
+                            "Ignored invitation from @%s (%s) — not approved",
+                            inviter, invite.repository.full_name,
+                        )
             except Exception:
                 logger.debug("Could not check invitations: %s", traceback.format_exc())
 
