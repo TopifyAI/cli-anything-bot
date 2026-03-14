@@ -11,14 +11,19 @@ import github_ops
 
 logger = logging.getLogger(__name__)
 
-HARNESS_METHODOLOGY = Path(__file__).parent.parent / "cli-anything-plugin" / "HARNESS.md"
+# Try multiple possible locations for HARNESS.md
+_HARNESS_CANDIDATES = [
+    Path(__file__).parent / "HARNESS.md",
+    Path(__file__).parent.parent / "cli-anything-plugin" / "HARNESS.md",
+]
 
 
 def _load_harness_md() -> str:
     """Load the HARNESS.md methodology document."""
-    if HARNESS_METHODOLOGY.is_file():
-        return HARNESS_METHODOLOGY.read_text()
-    logger.warning("HARNESS.md not found at %s, using embedded summary", HARNESS_METHODOLOGY)
+    for p in _HARNESS_CANDIDATES:
+        if p.is_file():
+            return p.read_text()
+    logger.warning("HARNESS.md not found, using embedded summary")
     return (
         "Follow the CLI-Anything methodology: analyze the codebase, design CLI architecture, "
         "implement Click-based CLI with REPL, write tests, create setup.py for PyPI packaging. "
@@ -37,7 +42,6 @@ def _collect_repo_context(local_path: Path) -> str:
     # Priority files (READMEs, build configs)
     priority = github_ops.read_priority_files(local_path)
     for name, content in priority.items():
-        # Truncate very long files
         if len(content) > 15_000:
             content = content[:15_000] + "\n... (truncated)"
         parts.append(f"## {name}\n```\n{content}\n```")
@@ -63,10 +67,18 @@ def _parse_generated_files(response_text: str) -> dict[str, str]:
 
     files = {}
     for path, content in matches:
-        # Strip leading/trailing whitespace but preserve internal formatting
         files[path.strip()] = content.strip() + "\n"
 
     return files
+
+
+def _stream_message(client, **kwargs) -> str:
+    """Send a message using streaming and return the full response text."""
+    collected = []
+    with client.messages.stream(**kwargs) as stream:
+        for text in stream.text_stream:
+            collected.append(text)
+    return "".join(collected)
 
 
 def build_harness(local_path: Path, software_name: str) -> tuple[dict[str, str], str]:
@@ -82,7 +94,8 @@ def build_harness(local_path: Path, software_name: str) -> tuple[dict[str, str],
 
     # Phase 1-2: Analysis and Architecture
     logger.info("Phase 1-2: Analyzing codebase and designing CLI architecture...")
-    analysis_response = client.messages.create(
+    analysis_text = _stream_message(
+        client,
         model=config.CLAUDE_MODEL,
         max_tokens=16_000,
         messages=[
@@ -110,12 +123,13 @@ def build_harness(local_path: Path, software_name: str) -> tuple[dict[str, str],
             }
         ],
     )
-    analysis_text = analysis_response.content[0].text
     analysis_files = _parse_generated_files(analysis_text)
+    logger.info("Phase 1-2 complete: %d files", len(analysis_files))
 
     # Phase 3: Implementation
     logger.info("Phase 3: Generating CLI implementation...")
-    impl_response = client.messages.create(
+    impl_text = _stream_message(
+        client,
         model=config.CLAUDE_MODEL,
         max_tokens=64_000,
         messages=[
@@ -154,12 +168,13 @@ def build_harness(local_path: Path, software_name: str) -> tuple[dict[str, str],
             }
         ],
     )
-    impl_text = impl_response.content[0].text
     impl_files = _parse_generated_files(impl_text)
+    logger.info("Phase 3 complete: %d files", len(impl_files))
 
     # Phase 4-5: Test Planning and Implementation
     logger.info("Phase 4-5: Generating tests...")
-    test_response = client.messages.create(
+    test_text = _stream_message(
+        client,
         model=config.CLAUDE_MODEL,
         max_tokens=32_000,
         messages=[
@@ -193,8 +208,8 @@ def build_harness(local_path: Path, software_name: str) -> tuple[dict[str, str],
             }
         ],
     )
-    test_text = test_response.content[0].text
     test_files = _parse_generated_files(test_text)
+    logger.info("Phase 4-5 complete: %d files", len(test_files))
 
     # Merge all generated files
     all_files = {}

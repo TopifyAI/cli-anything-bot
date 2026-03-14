@@ -39,8 +39,11 @@ def _extract_trigger(text: str) -> str | None:
     if rest.startswith("build"):
         rest = rest[len("build"):].strip()
 
+    # Filter out @mentions — they're not software names
+    words = [w for w in rest.split() if not w.startswith("@")]
+
     # Return explicit name or empty string (caller will use repo name)
-    return rest.split()[0] if rest else ""
+    return words[0] if words else ""
 
 
 def _derive_software_name(repo_full_name: str) -> str:
@@ -171,7 +174,9 @@ def poll_loop():
             # Auto-accept any pending repo collaboration invitations
             try:
                 for invite in gh.get_user().get_invitations():
-                    invite.accept()
+                    gh._Github__requester.requestJsonAndCheck(
+                        "PATCH", f"/user/repository_invitations/{invite.id}"
+                    )
                     logger.info("Accepted repo invitation: %s", invite.repository.full_name)
             except Exception:
                 logger.debug("Could not check invitations: %s", traceback.format_exc())
@@ -182,13 +187,19 @@ def poll_loop():
                     continue
                 seen.add(n.id)
 
+                def _safe_mark_read(notif):
+                    try:
+                        notif.mark_as_read()
+                    except Exception:
+                        pass  # May lack admin rights on some repos
+
                 # Only process issues and PRs where we might be mentioned
                 if n.subject.type not in ("Issue", "PullRequest"):
-                    n.mark_as_read()
+                    _safe_mark_read(n)
                     continue
 
                 if n.reason not in ("mention", "team_mention", "subscribed", "assign"):
-                    n.mark_as_read()
+                    _safe_mark_read(n)
                     continue
 
                 try:
@@ -196,7 +207,7 @@ def poll_loop():
                 except Exception:
                     logger.error("Error processing notification %s:\n%s", n.id, traceback.format_exc())
                 finally:
-                    n.mark_as_read()
+                    _safe_mark_read(n)
 
         except KeyboardInterrupt:
             logger.info("Shutting down...")
