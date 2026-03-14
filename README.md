@@ -15,24 +15,17 @@ without you writing a single line.
 The easiest way to use cli-anything-bot is through the hosted instance at
 `@cli-anything-bot`.
 
-### Step 1: Request access
-
-Email **chenglinwei@topify.ai** with:
-- Your GitHub username
-- The repository you want to use it on
-- A brief description of your use case
-
-Access is approved manually to prevent abuse. You'll receive a confirmation
-once approved.
-
-### Step 2: Invite the bot
+### Step 1: Invite the bot
 
 Go to your repo → **Settings → Collaborators → Add people** → invite
 `cli-anything-bot` with **Write** access.
 
-The bot operator will accept the invitation after approving your request.
+The bot operator reviews and approves incoming invitations periodically.
+To speed things up, you can email **chenglinwei@topify.ai**.
 
-### Step 3: Trigger the build
+### Step 2: Trigger the build
+
+Once the invitation is accepted, create an issue in your repo:
 
 Create an issue in your repo with `/cli-anything` in the body:
 
