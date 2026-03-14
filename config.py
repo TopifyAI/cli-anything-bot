@@ -17,15 +17,8 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 TRIGGER_KEYWORD = "/cli-anything"
 
 # --- Abuse prevention ---
-# Only approved users can trigger builds and have invitations accepted.
-# To request access, email chenglinwei@topify.ai
-
-# Comma-separated list of approved GitHub usernames
-ALLOWED_USERS = set(
-    u.strip().lower()
-    for u in os.environ.get("ALLOWED_USERS", "").split(",")
-    if u.strip()
-)
+# The bot does NOT auto-accept invitations. Operator must approve via email
+# (chenglinwei@topify.ai) then run: python main.py --invites
 
 # Max builds per user per day (0 = unlimited)
 DAILY_LIMIT_PER_USER = int(os.environ.get("DAILY_LIMIT_PER_USER", "3"))

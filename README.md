@@ -132,11 +132,21 @@ python main.py --once
 
 ### For repo owners
 
-1. Go to your repo → **Settings → Collaborators → Add people**
-2. Invite the bot account (e.g., `@cli-anything-bot`) with **Write** access
-3. The bot must accept the invitation (it does this automatically when it processes notifications)
+1. Email **chenglinwei@topify.ai** to request access (include your GitHub username and repo)
+2. Once approved, invite `@cli-anything-bot` to your repo (**Settings → Collaborators → Add**)  with **Write** access
+3. The operator accepts the invitation on the bot's behalf
 4. Create an issue with `/cli-anything` in the body
 5. The bot will comment acknowledging the request, then open a PR when done
+
+### For the bot operator
+
+To approve a user and accept their invitation:
+
+```bash
+python main.py --invites
+```
+
+This lists all pending invitations and lets you accept individually or all at once.
 
 ### What happens step by step
 

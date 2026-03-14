@@ -52,19 +52,8 @@ def _extract_trigger(text: str) -> str | None:
     return words[0] if words else ""
 
 
-def _check_access(username: str, repo_full_name: str) -> str | None:
-    """Check if a user/repo is allowed. Returns denial reason or None if allowed."""
-    if config.ALLOWED_USERS and username.lower() not in config.ALLOWED_USERS:
-        return (
-            f"User `@{username}` is not approved to use this bot.\n\n"
-            f"To request access, email **chenglinwei@topify.ai** with:\n"
-            f"- Your GitHub username\n"
-            f"- The repository you want to use it on\n"
-            f"- A brief description of your use case\n\n"
-            f"Once approved, the bot will accept your invitation and be ready to use."
-        )
-
-    # Rate limiting
+def _check_rate_limit(username: str) -> str | None:
+    """Check rate limits. Returns denial reason or None if allowed."""
     today = date.today().isoformat()
 
     if config.DAILY_LIMIT_PER_USER > 0:
@@ -154,15 +143,14 @@ def _process_notification(notification):
     elif subject.type == "PullRequest" and issue_number:
         trigger_user = gh_repo.get_pull(issue_number).user.login
 
-    # Access check
-    denial = _check_access(trigger_user, repo_full_name)
+    # Rate limit check
+    denial = _check_rate_limit(trigger_user)
     if denial:
-        logger.info("Access denied for %s on %s: %s", trigger_user, repo_full_name, denial)
+        logger.info("Rate limited: %s on %s: %s", trigger_user, repo_full_name, denial)
         if issue_number:
             github_ops.post_comment(
                 repo_full_name, issue_number,
-                f"⛔ **cli-anything-bot** cannot process this request.\n\n{denial}\n\n"
-                f"Contact the bot operator to request access.",
+                f"⏳ **cli-anything-bot** cannot process this request.\n\n{denial}",
             )
         return
 
@@ -231,26 +219,16 @@ def poll_loop():
 
     while True:
         try:
-            # Only accept invitations from approved users
+            # Log pending invitations — operator accepts manually after email approval
             try:
                 for invite in gh.get_user().get_invitations():
-                    inviter = invite.inviter.login if invite.inviter else ""
-                    repo_owner = invite.repository.owner.login if invite.repository else ""
-                    # Accept if the inviter or repo owner is on the allowed list
-                    allowed = not config.ALLOWED_USERS or (
-                        inviter.lower() in config.ALLOWED_USERS
-                        or repo_owner.lower() in config.ALLOWED_USERS
+                    inviter = invite.inviter.login if invite.inviter else "unknown"
+                    repo = invite.repository.full_name if invite.repository else "unknown"
+                    logger.info(
+                        "Pending invitation from @%s to %s (id: %d) — "
+                        "accept manually after approving via email",
+                        inviter, repo, invite.id,
                     )
-                    if allowed:
-                        gh._Github__requester.requestJsonAndCheck(
-                            "PATCH", f"/user/repository_invitations/{invite.id}"
-                        )
-                        logger.info("Accepted invitation from @%s: %s", inviter, invite.repository.full_name)
-                    else:
-                        logger.info(
-                            "Ignored invitation from @%s (%s) — not approved",
-                            inviter, invite.repository.full_name,
-                        )
             except Exception:
                 logger.debug("Could not check invitations: %s", traceback.format_exc())
 
@@ -303,6 +281,35 @@ def main():
             if n.subject.type in ("Issue", "PullRequest"):
                 _process_notification(n)
                 n.mark_as_read()
+        return
+
+    if "--invites" in sys.argv:
+        # List and optionally accept pending invitations
+        gh = Github(auth=Auth.Token(config.GITHUB_TOKEN))
+        invites = list(gh.get_user().get_invitations())
+        if not invites:
+            print("No pending invitations.")
+            return
+        for i, invite in enumerate(invites):
+            inviter = invite.inviter.login if invite.inviter else "unknown"
+            repo = invite.repository.full_name if invite.repository else "unknown"
+            print(f"  [{i + 1}] {repo} (invited by @{inviter}, id: {invite.id})")
+        print()
+        choice = input("Accept which? (number, 'all', or Enter to skip): ").strip()
+        if choice == "all":
+            for invite in invites:
+                gh._Github__requester.requestJsonAndCheck(
+                    "PATCH", f"/user/repository_invitations/{invite.id}"
+                )
+                print(f"  Accepted: {invite.repository.full_name}")
+        elif choice.isdigit() and 1 <= int(choice) <= len(invites):
+            invite = invites[int(choice) - 1]
+            gh._Github__requester.requestJsonAndCheck(
+                "PATCH", f"/user/repository_invitations/{invite.id}"
+            )
+            print(f"  Accepted: {invite.repository.full_name}")
+        else:
+            print("  Skipped.")
         return
 
     poll_loop()
