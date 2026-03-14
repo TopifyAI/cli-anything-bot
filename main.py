@@ -168,6 +168,14 @@ def poll_loop():
 
     while True:
         try:
+            # Auto-accept any pending repo collaboration invitations
+            try:
+                for invite in gh.get_user().get_invitations():
+                    invite.accept()
+                    logger.info("Accepted repo invitation: %s", invite.repository.full_name)
+            except Exception:
+                logger.debug("Could not check invitations: %s", traceback.format_exc())
+
             notifications = gh.get_user().get_notifications(all=False)
             for n in notifications:
                 if n.id in seen:
